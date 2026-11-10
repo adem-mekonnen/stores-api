@@ -5,14 +5,16 @@ public class ProductResponseDTO {
     private String id;
     private String name;
     private double price;
+    private CategoryResponseDTO category;
 
     public ProductResponseDTO() {
     }
 
-    public ProductResponseDTO(String id, String name, double price) {
+    public ProductResponseDTO(String id, String name, double price, CategoryResponseDTO category) {
         this.id = id;
         this.name = name;
         this.price = price;
+        this.category = category;
     }
 
     public String getId() {
@@ -37,5 +39,12 @@ public class ProductResponseDTO {
 
     public void setPrice(double price) {
         this.price = price;
+    }
+    public CategoryResponseDTO getCategory() {
+        return category;
+    }
+
+    public void setCategory(CategoryResponseDTO category) {
+        this.category = category;
     }
 }

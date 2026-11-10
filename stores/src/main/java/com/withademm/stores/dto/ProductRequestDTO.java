@@ -31,7 +31,8 @@ public class ProductRequestDTO {
             message = "Product price must have at most 10 integer digits and 2 decimal places"
     )
     private BigDecimal price;
-
+    @NotNull(message = "Category ID is required")
+    private Long categoryId;
     // Default constructor
     public ProductRequestDTO() {
     }
@@ -57,5 +58,13 @@ public class ProductRequestDTO {
 
     public void setPrice(BigDecimal price) {
         this.price = price;
+    }
+    // Add getter and setter:
+    public Long getCategoryId() {
+        return categoryId;
+    }
+
+    public void setCategoryId(Long categoryId) {
+        this.categoryId = categoryId;
     }
 }

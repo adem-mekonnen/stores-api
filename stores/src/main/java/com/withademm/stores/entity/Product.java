@@ -1,8 +1,6 @@
 package com.withademm.stores.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 
 @Entity
 @Table(name = "products")
@@ -15,13 +13,19 @@ public class Product {
 
     private double price;
 
+    // Many products belong to one Category
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id", nullable = false)
+    private Category category;
+
     public Product() {
     }
 
-    public Product(String id, String name, double price) {
+    public Product(String id, String name, double price, Category category) {
         this.id = id;
         this.name = name;
         this.price = price;
+        this.category = category;
     }
 
     public String getId() {
@@ -46,5 +50,13 @@ public class Product {
 
     public void setPrice(double price) {
         this.price = price;
+    }
+
+    public Category getCategory() {
+        return category;
+    }
+
+    public void setCategory(Category category) {
+        this.category = category;
     }
 }
