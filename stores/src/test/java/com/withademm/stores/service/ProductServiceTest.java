@@ -1,10 +1,13 @@
 package com.withademm.stores.service;
 
-import com.withademm.stores.dto.CategoryResponseDTO;
 import com.withademm.stores.dto.ProductRequestDTO;
 import com.withademm.stores.dto.ProductResponseDTO;
+import com.withademm.stores.dto.RejectProductDTO;
 import com.withademm.stores.entity.Category;
 import com.withademm.stores.entity.Product;
+import com.withademm.stores.entity.ProductStatus;
+import com.withademm.stores.entity.Role;
+import com.withademm.stores.entity.User;
 import com.withademm.stores.exception.ResourceNotFoundException;
 import com.withademm.stores.repository.ProductRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,66 +28,114 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class ProductServiceTest {
 
-    // 1. Create fake dependencies (Mocks)
     @Mock
     private ProductRepository productRepository;
 
     @Mock
     private CategoryService categoryService;
 
-    // 2. Inject the fake dependencies into the real ProductService
     @InjectMocks
     private ProductService productService;
 
     private Category testCategory;
     private Product testProduct;
+    private User testSeller;
+    private User testReviewer;
 
-    // Runs before each @Test to prepare fresh sample data
     @BeforeEach
     void setUp() {
         testCategory = new Category(1L, "Electronics");
-        testProduct = new Product("prod-123", "Gaming Mouse", 450.0, testCategory);
+
+        // 1. Mock Seller (who creates the product)
+        testSeller = new User("John Seller", "seller@stores.com", "pass123", Role.ROLE_SELLER);
+        testSeller.setId(10L);
+
+        // 2. Mock Reviewer (Manager who approves/rejects)
+        testReviewer = new User("Mike Manager", "manager@stores.com", "pass123", Role.ROLE_MANAGER);
+        testReviewer.setId(20L);
+
+        // 3. Mock Product (starts in PENDING_APPROVAL)
+        testProduct = new Product("prod-123", "Gaming Mouse", 450.0, testCategory, testSeller);
+        testProduct.setStatus(ProductStatus.PENDING_APPROVAL);
     }
 
     @Test
-    @DisplayName("Should successfully create a product when category exists")
+    @DisplayName("Create Product - Should set status to PENDING_APPROVAL and track seller")
     void createProduct_Success() {
-        // ARRANGE (Given)
         ProductRequestDTO requestDTO = new ProductRequestDTO();
         requestDTO.setName("Gaming Mouse");
         requestDTO.setPrice(BigDecimal.valueOf(450.0));
         requestDTO.setCategoryId(1L);
 
-        // Tell mock CategoryService: when categoryId 1 is searched, return testCategory
         when(categoryService.findCategoryEntityById(1L)).thenReturn(testCategory);
-
-        // Tell mock ProductRepository: when any product is saved, return testProduct
         when(productRepository.save(any(Product.class))).thenReturn(testProduct);
 
-        // ACT (When)
-        ProductResponseDTO result = productService.createProduct(requestDTO);
+        // Passed both requestDTO and testSeller:
+        ProductResponseDTO result = productService.createProduct(requestDTO, testSeller);
 
-        // ASSERT (Then)
         assertNotNull(result);
         assertEquals("Gaming Mouse", result.getName());
         assertEquals(450.0, result.getPrice());
-        assertNotNull(result.getCategory());
-        assertEquals("Electronics", result.getCategory().getName());
+        assertEquals(ProductStatus.PENDING_APPROVAL, result.getStatus());
+        assertEquals("seller@stores.com", result.getCreatedByEmail());
 
-        // Verify that the repository's save method was actually called exactly 1 time
         verify(productRepository, times(1)).save(any(Product.class));
     }
 
     @Test
-    @DisplayName("Should return product when a valid ID is provided")
+    @DisplayName("Approve Product - Should change status to APPROVED and set reviewer")
+    void approveProduct_Success() {
+        when(productRepository.findById("prod-123")).thenReturn(Optional.of(testProduct));
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ProductResponseDTO result = productService.approveProduct("prod-123", testReviewer);
+
+        assertNotNull(result);
+        assertEquals(ProductStatus.APPROVED, result.getStatus());
+        assertEquals("manager@stores.com", result.getReviewedByEmail());
+        assertNull(result.getRejectionReason());
+
+        verify(productRepository, times(1)).save(testProduct);
+    }
+
+    @Test
+    @DisplayName("Reject Product - Should change status to REJECTED and record feedback reason")
+    void rejectProduct_Success() {
+        RejectProductDTO rejectDTO = new RejectProductDTO("Photo is not clear");
+        when(productRepository.findById("prod-123")).thenReturn(Optional.of(testProduct));
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ProductResponseDTO result = productService.rejectProduct("prod-123", rejectDTO, testReviewer);
+
+        assertNotNull(result);
+        assertEquals(ProductStatus.REJECTED, result.getStatus());
+        assertEquals("Photo is not clear", result.getRejectionReason());
+        assertEquals("manager@stores.com", result.getReviewedByEmail());
+
+        verify(productRepository, times(1)).save(testProduct);
+    }
+
+    @Test
+    @DisplayName("Approve Product - Should throw ResourceNotFoundException when product does not exist")
+    void approveProduct_NotFound_ThrowsException() {
+        when(productRepository.findById("invalid-id")).thenReturn(Optional.empty());
+
+        ResourceNotFoundException exception = assertThrows(
+                ResourceNotFoundException.class,
+                () -> productService.approveProduct("invalid-id", testReviewer)
+        );
+
+        assertEquals("Product not found with id: invalid-id", exception.getMessage());
+        verify(productRepository, never()).save(any(Product.class));
+    }
+
+    @Test
+    @DisplayName("Get Product by ID - Should return product when valid ID is provided")
     void getProductById_Success() {
-        // ARRANGE
         when(productRepository.findById("prod-123")).thenReturn(Optional.of(testProduct));
 
-        // ACT
         ProductResponseDTO result = productService.getProductById("prod-123");
 
-        // ASSERT
         assertNotNull(result);
         assertEquals("prod-123", result.getId());
         assertEquals("Gaming Mouse", result.getName());
@@ -92,21 +143,16 @@ class ProductServiceTest {
     }
 
     @Test
-    @DisplayName("Should throw ResourceNotFoundException when product ID does not exist")
+    @DisplayName("Get Product by ID - Should throw ResourceNotFoundException when ID does not exist")
     void getProductById_NotFound_ThrowsException() {
-        // ARRANGE: Mock repository returns empty Optional (product not found)
         when(productRepository.findById("invalid-id")).thenReturn(Optional.empty());
 
-        // ACT & ASSERT: Expect ResourceNotFoundException to be thrown
         ResourceNotFoundException exception = assertThrows(
                 ResourceNotFoundException.class,
                 () -> productService.getProductById("invalid-id")
         );
 
-        // Verify the exception message matches
         assertEquals("Product not found with id: invalid-id", exception.getMessage());
-
-        // Verify findById was called
         verify(productRepository, times(1)).findById("invalid-id");
     }
 }
