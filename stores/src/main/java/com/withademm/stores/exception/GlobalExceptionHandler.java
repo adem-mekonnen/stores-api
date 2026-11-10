@@ -11,7 +11,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.HashMap;
 import java.util.Map;
 
-@RestControllerAdvice
+// Restrict advice ONLY to your application controllers:
+@RestControllerAdvice(basePackages = "com.withademm.stores.controller")
 public class GlobalExceptionHandler {
 
     // 1. Handles when an item is not found (404)
